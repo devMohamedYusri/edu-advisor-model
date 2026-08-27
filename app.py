@@ -47,9 +47,9 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
 
     btn.click(gradio_recommend, inputs=[passed_input, hours_slider], outputs=output_json)
 
-app = gr.mount_gradio_app(fastapi_app, demo, path="/")
+for route in fastapi_app.routes:
+    if route not in demo.app.routes:
+        demo.app.routes.append(route)
 
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    demo.launch(server_name="0.0.0.0", server_port=7860)
