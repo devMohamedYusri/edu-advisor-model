@@ -6,6 +6,18 @@ from src.engine.recommender import recommend_registration_bundle
 from src.data.processor import load_training_dataset
 from src.config import OUTPUT_JSON_PATH
 
+try:
+    import spaces
+    has_spaces = True
+except ImportError:
+    has_spaces = False
+
+def spaces_wrapper(fn):
+    if has_spaces:
+        return spaces.GPU(fn)
+    return fn
+
+@spaces_wrapper
 def gradio_recommend(passed_courses_str, max_credit_hours):
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
