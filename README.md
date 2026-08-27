@@ -3,8 +3,9 @@ title: Academic Advisor AI Recommender
 emoji: 🎓
 colorFrom: blue
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 5.9.1
+app_file: app.py
 pinned: false
 ---
 
@@ -14,7 +15,7 @@ Deep Learning microservice for university academic advising, smart prerequisite-
 
 ## 🚀 Live API Endpoints
 
-- **Swagger Documentation:** `/docs`
+- **Interactive Swagger UI:** `/docs`
 - **ReDoc:** `/redoc`
 - **Health Check:** `GET /health`
 - **Course Recommendation:** `POST /api/v1/recommend`
@@ -27,6 +28,4 @@ Deep Learning microservice for university academic advising, smart prerequisite-
 1. **Upload New Transcripts Anytime:**
    Send a `POST` request to `/api/v1/upload-transcript` with the new student's PDF file.
 2. **Automated Incremental Retraining:**
-   Send a `POST` request to `/api/v1/retrain` to 
-   automatically re-extract and fine-tune the model 
-   weights across all transcripts.
+   Send a `POST` request to `/api/v1/retrain` to automatically re-extract and fine-tune the model weights across all transcripts.
