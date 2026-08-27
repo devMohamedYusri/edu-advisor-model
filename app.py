@@ -4,10 +4,10 @@ import gradio as gr
 from src.api.routes import app as fastapi_app
 from src.engine.recommender import recommend_registration_bundle
 from src.data.processor import load_training_dataset
-from src.config import OUTPUT_JSON_PATH, DEFAULT_PORT
+from src.config import OUTPUT_JSON_PATH
 
 def gradio_recommend(passed_courses_str, max_credit_hours):
-    if not passed_courses_str.strip():
+    if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
 
     passed = [c.strip().upper() for c in passed_courses_str.split(",") if c.strip()]
@@ -51,5 +51,5 @@ app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", DEFAULT_PORT))
+    port = int(os.getenv("PORT", 7860))
     uvicorn.run(app, host="0.0.0.0", port=port)
