@@ -1,11 +1,25 @@
 import os
 import json
 import gradio as gr
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
 from src.api.routes import app as fastapi_app
 from src.engine.recommender import recommend_registration_bundle
 from src.data.processor import load_training_dataset
-from src.config import OUTPUT_JSON_PATH, DEFAULT_PORT
+from src.config import OUTPUT_JSON_PATH
 
+try:
+    import spaces
+    has_spaces = True
+except ImportError:
+    has_spaces = False
+
+def spaces_wrapper(fn):
+    if has_spaces:
+        return spaces.GPU(fn)
+    return fn
+
+@spaces_wrapper
 def gradio_recommend(passed_courses_str, max_credit_hours):
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
@@ -47,10 +61,27 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
 
     btn.click(gradio_recommend, inputs=[passed_input, hours_slider], outputs=output_json)
 
-# Mount Gradio onto the primary FastAPI app so all FastAPI docs and endpoints are preserved
-app = gr.mount_gradio_app(fastapi_app, demo, path="/")
+# Append all FastAPI routes directly into Gradio's internal router
+for route in fastapi_app.routes:
+    if route not in demo.app.routes:
+        demo.app.routes.append(route)
+
+# Expose Swagger UI, ReDoc, and OpenAPI specification directly
+@demo.app.get("/docs", include_in_schema=False)
+def get_swagger_ui():
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="Academic Advisor AI - Swagger UI")
+
+@demo.app.get("/redoc", include_in_schema=False)
+def get_redoc_ui():
+    return get_redoc_html(openapi_url="/openapi.json", title="Academic Advisor AI - ReDoc")
+
+@demo.app.get("/openapi.json", include_in_schema=False)
+def get_openapi_specs():
+    return get_openapi(
+        title="Academic Advisor AI Recommendation Engine",
+        version="1.1.0",
+        routes=demo.app.routes
+    )
 
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", DEFAULT_PORT))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    demo.launch(server_name="0.0.0.0", server_port=7860, ssr_mode=False)
