@@ -18,7 +18,7 @@ def spaces_wrapper(fn):
     return fn
 
 @spaces_wrapper
-def gradio_recommend(passed_courses_str, max_credit_hours):
+def gradio_recommend(passed_courses_str: str, max_credit_hours: int) -> str:
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
 
@@ -41,7 +41,7 @@ def gradio_recommend(passed_courses_str, max_credit_hours):
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 @spaces_wrapper
-def gradio_upload_and_retrain(pdf_file):
+def gradio_upload_and_retrain(pdf_file) -> str:
     if pdf_file is None:
         return "Please upload a valid PDF transcript file."
     
@@ -124,7 +124,6 @@ This microservice provides automated course recommendation, prerequisite priorit
 
 ```csharp
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -179,7 +178,7 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
                 gradio_recommend,
                 inputs=[passed_input, hours_slider],
                 outputs=output_json,
-                api_name="recommend"
+                show_api=False
             )
 
         with gr.TabItem("📖 .NET API Documentation & Code Examples"):
@@ -198,8 +197,8 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
                 gradio_upload_and_retrain,
                 inputs=[pdf_input],
                 outputs=retrain_output,
-                api_name="upload_and_retrain"
+                show_api=False
             )
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(show_api=False)
