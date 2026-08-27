@@ -1,12 +1,23 @@
 import os
 import json
 import gradio as gr
-from src.api.routes import app as fastapi_app
 from src.engine.recommender import recommend_registration_bundle
 from src.data.processor import load_training_dataset, parse_pdf_transcript
 from src.engine.trainer import train_and_export
 from src.config import OUTPUT_JSON_PATH, DATA_DIR
 
+try:
+    import spaces
+    has_spaces = True
+except ImportError:
+    has_spaces = False
+
+def spaces_wrapper(fn):
+    if has_spaces:
+        return spaces.GPU(fn)
+    return fn
+
+@spaces_wrapper
 def gradio_recommend(passed_courses_str, max_credit_hours):
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
@@ -29,6 +40,7 @@ def gradio_recommend(passed_courses_str, max_credit_hours):
     result = recommend_registration_bundle(passed, available, int(max_credit_hours))
     return json.dumps(result, indent=2, ensure_ascii=False)
 
+@spaces_wrapper
 def gradio_upload_and_retrain(pdf_file):
     if pdf_file is None:
         return "Please upload a valid PDF transcript file."
@@ -59,31 +71,22 @@ This microservice provides automated course recommendation, prerequisite priorit
 
 ### 1. 🎯 Main Recommendation Endpoint
 
-- **URL:** `POST https://mohamedyusri-edu-advisor-recommendation-system.hf.space/api/v1/recommend`
+- **URL:** `POST https://mohamedyusri-edu-advisor-recommendation-system.hf.space/gradio_api/call/recommend`
 - **Headers:** `Content-Type: application/json`
 
 #### 📥 Request Body (JSON):
 ```json
 {
-  "passed_courses": [
-    "CS141", "BS101", "BS111", "BS105", "BS103", "CS101", "UNI008"
-  ],
-  "available_courses": [
-    { "code": "CS142", "hours": 3, "name": "Programming 2" },
-    { "code": "CS102", "hours": 3, "name": "Logic Design" },
-    { "code": "BS102", "hours": 3, "name": "Mathematics 2" },
-    { "code": "BS133", "hours": 2, "name": "Computing Economics" },
-    { "code": "UNI001", "hours": 1, "name": "Human Rights" },
-    { "code": "UNI003", "hours": 1, "name": "Problem Solving" }
-  ],
-  "max_credit_hours": 9
+  "data": [
+    "CS141, BS101, BS111, BS105, BS103, CS101, UNI008",
+    9
+  ]
 }
 ```
 
 #### 📤 Response Body (JSON):
 ```json
 {
-  "success": true,
   "total_credit_hours": 7,
   "max_allowed_hours": 9,
   "suggested_courses": [
@@ -127,70 +130,31 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-public class CourseInput
-{
-    public string Code { get; set; }
-    public int Hours { get; set; }
-    public string Name { get; set; }
-}
-
-public class RecommendationRequest
-{
-    public List<string> Passed_Courses { get; set; }
-    public List<CourseInput> Available_Courses { get; set; }
-    public int Max_Credit_Hours { get; set; }
-}
-
-public class CourseRecommendation
-{
-    public string Code { get; set; }
-    public int Hours { get; set; }
-    public string Name { get; set; }
-    public double Advisor_Score { get; set; }
-}
-
-public class RecommendationResponse
-{
-    public bool Success { get; set; }
-    public int Total_Credit_Hours { get; set; }
-    public int Max_Allowed_Hours { get; set; }
-    public List<CourseRecommendation> Suggested_Courses { get; set; }
-}
-
 public class AcademicAdvisorClient
 {
     private readonly HttpClient _httpClient;
-    private const string ApiUrl = "https://mohamedyusri-edu-advisor-recommendation-system.hf.space/api/v1/recommend";
+    private const string ApiUrl = "https://mohamedyusri-edu-advisor-recommendation-system.hf.space/gradio_api/call/recommend";
 
     public AcademicAdvisorClient(HttpClient httpClient)
     {
         _httpClient = httpClient;
     }
 
-    public async Task<RecommendationResponse> GetRecommendationsAsync(RecommendationRequest request)
+    public async Task<string> GetRecommendationsAsync(string passedCoursesCsv, int maxCreditHours)
     {
-        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        var jsonContent = new StringContent(JsonSerializer.Serialize(request, options), Encoding.UTF8, "application/json");
+        var payload = new
+        {
+            data = new object[] { passedCoursesCsv, maxCreditHours }
+        };
 
+        var jsonContent = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync(ApiUrl, jsonContent);
         response.EnsureSuccessStatusCode();
 
-        var responseString = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<RecommendationResponse>(responseString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        return await response.Content.ReadAsStringAsync();
     }
 }
 ```
-
----
-
-### 3. 📂 Supporting Endpoints
-
-| Endpoint | Method | Purpose |
-| :--- | :--- | :--- |
-| `/health` | `GET` | System health, model status, vocabulary size |
-| `/api/v1/catalog` | `GET` | Extracted unique course catalog |
-| `/api/v1/upload-transcript` | `POST` | Upload a student PDF transcript (`multipart/form-data`) |
-| `/api/v1/retrain` | `POST` | Trigger model retraining across all transcripts |
 """
 
 with gr.Blocks(title="Academic Advisor AI") as demo:
@@ -211,7 +175,12 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
                 with gr.Column():
                     output_json = gr.Code(label="Recommended Registration Bundle (JSON Output)", language="json")
 
-            btn.click(gradio_recommend, inputs=[passed_input, hours_slider], outputs=output_json)
+            btn.click(
+                gradio_recommend,
+                inputs=[passed_input, hours_slider],
+                outputs=output_json,
+                api_name="recommend"
+            )
 
         with gr.TabItem("📖 .NET API Documentation & Code Examples"):
             gr.Markdown(API_DOCS_MARKDOWN)
@@ -225,12 +194,12 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
                 with gr.Column():
                     retrain_output = gr.Textbox(label="Retraining Status", lines=4)
 
-            retrain_btn.click(gradio_upload_and_retrain, inputs=[pdf_input], outputs=retrain_output)
-
-# Attach FastAPI routes so HTTP API calls from .NET work directly
-for route in fastapi_app.routes:
-    if route not in demo.app.routes:
-        demo.app.routes.append(route)
+            retrain_btn.click(
+                gradio_upload_and_retrain,
+                inputs=[pdf_input],
+                outputs=retrain_output,
+                api_name="upload_and_retrain"
+            )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, ssr_mode=False)
+    demo.launch()
