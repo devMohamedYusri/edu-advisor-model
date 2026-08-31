@@ -1,10 +1,12 @@
 import os
 import json
+import uvicorn
 import gradio as gr
 from src.engine.recommender import recommend_registration_bundle
 from src.data.processor import load_training_dataset, parse_pdf_transcript
 from src.engine.trainer import train_and_export
-from src.config import OUTPUT_JSON_PATH, DATA_DIR
+from src.config import OUTPUT_JSON_PATH, DATA_DIR, DEFAULT_PORT
+from src.api.routes import app as fastapi_app
 
 try:
     import spaces
@@ -60,33 +62,60 @@ def gradio_upload_and_retrain(pdf_file) -> str:
 API_DOCS_MARKDOWN = """
 # 📖 Academic Advisor AI — API Integration Guide
 
-This microservice provides automated course recommendation, prerequisite prioritization, and credit-hour packing.
+This microservice provides REST API endpoints and an interactive UI for automated course recommendation, prerequisite prioritization, and credit-hour packing.
 
 ---
 
 ### 🌐 Live Production Base URL
 `https://mohamedyusri-edu-advisor-recommendation-system.hf.space`
 
+> **Note for Private Spaces:** If your Hugging Face Space is set to **Private**, include your Hugging Face User Access Token in all requests:
+> `Authorization: Bearer <HF_TOKEN>`
+
 ---
 
-### 1. 🎯 Main Recommendation Endpoint
+### 1. 🩺 Health Check Endpoint
+- **URL:** `GET https://mohamedyusri-edu-advisor-recommendation-system.hf.space/health`
+- **Headers:** `Authorization: Bearer <HF_TOKEN>` (for private space)
+- **Response:**
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "vocabulary_tokens_count": 48,
+  "total_pdfs_in_dataset": 3,
+  "version": "1.1.0"
+}
+```
 
-- **URL:** `POST https://mohamedyusri-edu-advisor-recommendation-system.hf.space/gradio_api/call/recommend`
-- **Headers:** `Content-Type: application/json`
+---
+
+### 2. 🎯 Course Recommendation Endpoint
+- **URL:** `POST https://mohamedyusri-edu-advisor-recommendation-system.hf.space/api/v1/recommend`
+- **Headers:** 
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <HF_TOKEN>` (if private)
 
 #### 📥 Request Body (JSON):
 ```json
 {
-  "data": [
-    "CS141, BS101, BS111, BS105, BS103, CS101, UNI008",
-    9
-  ]
+  "passed_courses": ["CS141", "BS101", "BS111", "BS105", "BS103", "CS101", "UNI008"],
+  "available_courses": [
+    { "code": "CS142", "hours": 3, "name": "Programming 2" },
+    { "code": "CS102", "hours": 3, "name": "Logic Design" },
+    { "code": "BS102", "hours": 3, "name": "Mathematics 2" },
+    { "code": "BS133", "hours": 2, "name": "Computing Economics" },
+    { "code": "UNI001", "hours": 1, "name": "Human Rights" },
+    { "code": "UNI003", "hours": 1, "name": "Problem Solving" }
+  ],
+  "max_credit_hours": 9
 }
 ```
 
 #### 📤 Response Body (JSON):
 ```json
 {
+  "success": true,
   "total_credit_hours": 7,
   "max_allowed_hours": 9,
   "suggested_courses": [
@@ -120,11 +149,12 @@ This microservice provides automated course recommendation, prerequisite priorit
 
 ---
 
-### 2. 💻 Ready-to-Use C# .NET Example
+### 3. 💻 Ready-to-Use C# .NET Example
 
 ```csharp
 using System;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -132,24 +162,39 @@ using System.Threading.Tasks;
 public class AcademicAdvisorClient
 {
     private readonly HttpClient _httpClient;
-    private const string ApiUrl = "https://mohamedyusri-edu-advisor-recommendation-system.hf.space/gradio_api/call/recommend";
+    private const string BaseUrl = "https://mohamedyusri-edu-advisor-recommendation-system.hf.space";
+    private readonly string _hfToken;
 
-    public AcademicAdvisorClient(HttpClient httpClient)
+    public AcademicAdvisorClient(HttpClient httpClient, string hfToken = null)
     {
         _httpClient = httpClient;
+        _hfToken = hfToken;
     }
 
-    public async Task<string> GetRecommendationsAsync(string passedCoursesCsv, int maxCreditHours)
+    public async Task<string> CheckHealthAsync()
     {
-        var payload = new
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/health");
+        if (!string.IsNullOrEmpty(_hfToken))
         {
-            data = new object[] { passedCoursesCsv, maxCreditHours }
-        };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _hfToken);
+        }
 
-        var jsonContent = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync(ApiUrl, jsonContent);
+        var response = await _httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 
+    public async Task<string> GetRecommendationsAsync(object payload)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v1/recommend");
+        if (!string.IsNullOrEmpty(_hfToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _hfToken);
+        }
+
+        request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await _httpClient.SendAsync(request);
+        response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
 }
@@ -177,8 +222,7 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
             btn.click(
                 gradio_recommend,
                 inputs=[passed_input, hours_slider],
-                outputs=output_json,
-                show_api=False
+                outputs=output_json
             )
 
         with gr.TabItem("📖 .NET API Documentation & Code Examples"):
@@ -196,9 +240,12 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
             retrain_btn.click(
                 gradio_upload_and_retrain,
                 inputs=[pdf_input],
-                outputs=retrain_output,
-                show_api=False
+                outputs=retrain_output
             )
 
+# Mount Gradio demo on top of FastAPI application
+app = gr.mount_gradio_app(fastapi_app, demo, path="/")
+
 if __name__ == "__main__":
-    demo.launch(show_api=False)
+    uvicorn.run(app, host="0.0.0.0", port=DEFAULT_PORT)
+
