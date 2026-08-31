@@ -37,6 +37,19 @@ def prepare_tensors(samples, course_to_id):
         torch.tensor(target_scores_list, dtype=torch.float32)
     )
 
+try:
+    import spaces
+except ImportError:
+    class spaces:
+        @staticmethod
+        def GPU(func=None, duration=None):
+            def decorator(f):
+                return f
+            if func is not None and callable(func):
+                return func
+            return decorator
+
+@spaces.GPU
 def train_and_export(force_reprocess=True, epochs=EPOCHS, batch_size=BATCH_SIZE, model_path=MODEL_PATH, vocab_path=VOCAB_PATH):
     dataset = load_training_dataset(OUTPUT_JSON_PATH, force_reprocess=force_reprocess)
     samples = dataset.get("training_samples", [])
@@ -50,7 +63,8 @@ def train_and_export(force_reprocess=True, epochs=EPOCHS, batch_size=BATCH_SIZE,
 
     history_ids, candidate_ids, targets = prepare_tensors(samples, course_to_id)
     
-    model = AcademicAdvisorScorer(num_courses=len(course_to_id), embed_dim=EMBED_DIM)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = AcademicAdvisorScorer(num_courses=len(course_to_id), embed_dim=EMBED_DIM).to(device)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     criterion = nn.BCELoss()
 
@@ -62,6 +76,10 @@ def train_and_export(force_reprocess=True, epochs=EPOCHS, batch_size=BATCH_SIZE,
     for epoch in range(1, epochs + 1):
         epoch_loss = 0.0
         for batch_hist, batch_cand, batch_targets in dataloader:
+            batch_hist = batch_hist.to(device)
+            batch_cand = batch_cand.to(device)
+            batch_targets = batch_targets.to(device)
+
             optimizer.zero_grad()
             predictions = model(batch_hist, batch_cand).squeeze(-1)
             loss = criterion(predictions, batch_targets)

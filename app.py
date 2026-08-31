@@ -10,16 +10,17 @@ from src.api.routes import app as fastapi_app
 
 try:
     import spaces
-    has_spaces = True
 except ImportError:
-    has_spaces = False
+    class spaces:
+        @staticmethod
+        def GPU(func=None, duration=None):
+            def decorator(f):
+                return f
+            if func is not None and callable(func):
+                return func
+            return decorator
 
-def spaces_wrapper(fn):
-    if has_spaces:
-        return spaces.GPU(fn)
-    return fn
-
-@spaces_wrapper
+@spaces.GPU
 def gradio_recommend(passed_courses_str: str, max_credit_hours: int) -> str:
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)
@@ -42,7 +43,7 @@ def gradio_recommend(passed_courses_str: str, max_credit_hours: int) -> str:
     result = recommend_registration_bundle(passed, available, int(max_credit_hours))
     return json.dumps(result, indent=2, ensure_ascii=False)
 
-@spaces_wrapper
+@spaces.GPU
 def gradio_upload_and_retrain(pdf_file) -> str:
     if pdf_file is None:
         return "Please upload a valid PDF transcript file."

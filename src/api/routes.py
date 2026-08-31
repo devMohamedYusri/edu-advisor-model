@@ -35,8 +35,8 @@ app.add_middleware(
 def startup_event():
     ensure_model_and_vocab_exist()
 
-@app.get("/", tags=["System"])
-def root():
+@app.get("/api/v1/info", tags=["System"])
+def api_info():
     return {
         "service": API_TITLE,
         "status": "online",

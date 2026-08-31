@@ -4,24 +4,39 @@ from src.config import MODEL_PATH, VOCAB_PATH, EMBED_DIM
 from src.utils import load_json, check_artifacts_exist, pack_credit_bundle
 from src.model.network import AcademicAdvisorScorer
 
+try:
+    import spaces
+except ImportError:
+    class spaces:
+        @staticmethod
+        def GPU(func=None, duration=None):
+            def decorator(f):
+                return f
+            if func is not None and callable(func):
+                return func
+            return decorator
+
 def ensure_model_and_vocab_exist(model_path=MODEL_PATH, vocab_path=VOCAB_PATH):
     if not check_artifacts_exist(model_path, vocab_path):
         from src.engine.trainer import train_and_export
         train_and_export(model_path=model_path, vocab_path=vocab_path)
 
+@spaces.GPU
 def recommend_registration_bundle(passed_courses, available_courses, max_credit_hours, model_path=MODEL_PATH, vocab_path=VOCAB_PATH):
     ensure_model_and_vocab_exist(model_path=model_path, vocab_path=vocab_path)
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     course_to_id = load_json(vocab_path)
     model = AcademicAdvisorScorer(num_courses=len(course_to_id), embed_dim=EMBED_DIM)
-    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu'), weights_only=True))
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+    model.to(device)
     model.eval()
 
     hist_tokens = [course_to_id.get(c, 0) for c in passed_courses] or [0]
     cand_tokens = [course_to_id.get(c['code'], 0) for c in available_courses]
 
-    hist_ids = torch.tensor([hist_tokens], dtype=torch.long)
-    cand_ids = torch.tensor([cand_tokens], dtype=torch.long)
+    hist_ids = torch.tensor([hist_tokens], dtype=torch.long, device=device)
+    cand_ids = torch.tensor([cand_tokens], dtype=torch.long, device=device)
 
     with torch.no_grad():
         raw_scores = model(hist_ids, cand_ids).squeeze(0)
