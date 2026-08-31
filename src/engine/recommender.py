@@ -1,9 +1,3 @@
-import json
-import torch
-from src.config import MODEL_PATH, VOCAB_PATH, EMBED_DIM
-from src.utils import load_json, check_artifacts_exist, pack_credit_bundle
-from src.model.network import AcademicAdvisorScorer
-
 try:
     import spaces
 except ImportError:
@@ -15,6 +9,12 @@ except ImportError:
             if func is not None and callable(func):
                 return func
             return decorator
+
+import json
+import torch
+from src.config import MODEL_PATH, VOCAB_PATH, EMBED_DIM
+from src.utils import load_json, check_artifacts_exist, pack_credit_bundle
+from src.model.network import AcademicAdvisorScorer
 
 def ensure_model_and_vocab_exist(model_path=MODEL_PATH, vocab_path=VOCAB_PATH):
     if not check_artifacts_exist(model_path, vocab_path):

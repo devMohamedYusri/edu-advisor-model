@@ -1,3 +1,15 @@
+try:
+    import spaces
+except ImportError:
+    class spaces:
+        @staticmethod
+        def GPU(func=None, duration=None):
+            def decorator(f):
+                return f
+            if func is not None and callable(func):
+                return func
+            return decorator
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -36,18 +48,6 @@ def prepare_tensors(samples, course_to_id):
         torch.tensor(candidate_ids_list, dtype=torch.long),
         torch.tensor(target_scores_list, dtype=torch.float32)
     )
-
-try:
-    import spaces
-except ImportError:
-    class spaces:
-        @staticmethod
-        def GPU(func=None, duration=None):
-            def decorator(f):
-                return f
-            if func is not None and callable(func):
-                return func
-            return decorator
 
 @spaces.GPU
 def train_and_export(force_reprocess=True, epochs=EPOCHS, batch_size=BATCH_SIZE, model_path=MODEL_PATH, vocab_path=VOCAB_PATH):

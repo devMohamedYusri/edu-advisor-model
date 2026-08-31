@@ -1,13 +1,3 @@
-import os
-import json
-import uvicorn
-import gradio as gr
-from src.engine.recommender import recommend_registration_bundle
-from src.data.processor import load_training_dataset, parse_pdf_transcript
-from src.engine.trainer import train_and_export
-from src.config import OUTPUT_JSON_PATH, DATA_DIR, DEFAULT_PORT
-from src.api.routes import app as fastapi_app
-
 try:
     import spaces
 except ImportError:
@@ -19,6 +9,16 @@ except ImportError:
             if func is not None and callable(func):
                 return func
             return decorator
+
+import os
+import json
+import uvicorn
+import gradio as gr
+from src.engine.recommender import recommend_registration_bundle
+from src.data.processor import load_training_dataset, parse_pdf_transcript
+from src.engine.trainer import train_and_export
+from src.config import OUTPUT_JSON_PATH, DATA_DIR, DEFAULT_PORT
+from src.api.routes import app as fastapi_app
 
 @spaces.GPU
 def gradio_recommend(passed_courses_str: str, max_credit_hours: int) -> str:
@@ -244,7 +244,8 @@ with gr.Blocks(title="Academic Advisor AI") as demo:
                 outputs=retrain_output
             )
 
-# Mount Gradio demo on top of FastAPI application
+# Mount Gradio demo on top of FastAPI application with queue enabled for ZeroGPU
+demo.queue()
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
 if __name__ == "__main__":
