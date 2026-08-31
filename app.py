@@ -21,6 +21,10 @@ from src.config import OUTPUT_JSON_PATH, DATA_DIR, DEFAULT_PORT
 from src.api.routes import app as fastapi_app
 
 @spaces.GPU
+def _spaces_gpu_init():
+    return True
+
+@spaces.GPU
 def gradio_recommend(passed_courses_str: str, max_credit_hours: int) -> str:
     if not passed_courses_str or not passed_courses_str.strip():
         return json.dumps({"error": "Please provide passed course codes."}, indent=2)

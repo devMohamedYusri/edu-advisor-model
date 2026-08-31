@@ -5,3 +5,5 @@ python-multipart>=0.0.18
 pypdfium2>=4.30.0
 torch>=2.2.0
 gradio>=5.0.0
+spaces>=0.30.0; sys_platform != 'win32'
+
