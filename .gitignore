@@ -9,12 +9,24 @@ venv/
 .venv/
 ENV/
 
-# IDEs
+# Sensitive Data & Raw Transcripts
+data/*.pdf
+*.pdf
+
+# IDEs & Tools
 .vscode/
 .idea/
+.kilo/
 *.swp
 *.swo
 
-# OS
+# Environment & Secrets
+.env
+.env.*
+*.log
+
+# Temp & Artifacts
+scratch/
 .DS_Store
 Thumbs.db
+
